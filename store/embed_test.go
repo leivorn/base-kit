@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
 
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"

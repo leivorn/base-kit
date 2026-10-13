@@ -1,9 +1,9 @@
 // basekit-migrate 把 base 模板里的 import 路径改写成 base-kit 的路径。
 //
-// 基底 v2.0.0 把框架层和系统管理模块搬到了 github.com/xsxs89757/base-kit，
+// 基底 v2.0.0 把框架层和系统管理模块搬到了 github.com/leivorn/base-kit，
 // 下游 make sync-base 之后跑一次这个工具，业务代码里的 import 就自动改好了：
 //
-//	cd server && go run github.com/xsxs89757/base-kit/cmd/basekit-migrate ./...
+//	cd server && go run github.com/leivorn/base-kit/cmd/basekit-migrate ./...
 //
 // 不带 @latest：在 server/ 下运行时版本跟随 go.mod 里钉的 kit，和库本身一致；
 // @latest 在 GOPROXY 有延迟的几分钟里会拿到旧版。
@@ -27,7 +27,7 @@ import (
 	"strings"
 )
 
-const kit = "github.com/xsxs89757/base-kit"
+const kit = "github.com/leivorn/base-kit"
 
 // 搬到 kit 的包。key 是模板里的旧路径，value 是 kit 里的新路径。
 // 注意顺序无关：查表是精确匹配，不做前缀替换。

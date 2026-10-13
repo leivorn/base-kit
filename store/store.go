@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xsxs89757/base-kit/config"
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
+	"github.com/leivorn/base-kit/config"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
 
 	// 纯 Go 的 SQLite 驱动：deploy.sh 用 CGO_ENABLED=0 交叉编译，
 	// CGO 版驱动 (gorm.io/driver/sqlite) 编译出的二进制在生产连库直接 fatal

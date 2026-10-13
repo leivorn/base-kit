@@ -1,8 +1,8 @@
 package router
 
 import (
-	admin "github.com/xsxs89757/base-kit/handler/admin"
-	"github.com/xsxs89757/base-kit/middleware"
+	admin "github.com/leivorn/base-kit/handler/admin"
+	"github.com/leivorn/base-kit/middleware"
 
 	"github.com/gofiber/fiber/v2"
 )

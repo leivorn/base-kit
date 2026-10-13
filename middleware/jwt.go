@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xsxs89757/base-kit/config"
+	"github.com/leivorn/base-kit/config"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"

@@ -13,7 +13,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/driver/mysql"

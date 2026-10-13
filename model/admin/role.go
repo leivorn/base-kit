@@ -1,6 +1,6 @@
 package admin
 
-import "github.com/xsxs89757/base-kit/model"
+import "github.com/leivorn/base-kit/model"
 
 type Role struct {
 	model.BaseModel

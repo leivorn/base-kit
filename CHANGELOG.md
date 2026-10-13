@@ -7,6 +7,20 @@ base-kit 的版本记录。格式参考 Keep a Changelog，版本号遵循语义
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-10-13
+
+### 模块路径
+
+- 模块路径由 `github.com/xsxs89757/base-kit` 改为 **`github.com/leivorn/base-kit`**:GitHub 账号 xsxs89757 改名为
+  leivorn,旧用户名不再由本人持有,不能再作为模块来源。代码与 1.4.0 相同,只改了路径。
+- 1.4.0 及更早版本仍可按旧路径从 Go 模块代理(proxy.golang.org)取到,已钉版本的项目不会立刻坏;但旧路径不会再有新版本。
+
+#### 升级步骤
+
+1. `cd server && go get github.com/leivorn/base-kit@v1.5.0`,再把代码里的 `github.com/xsxs89757/base-kit` 全部替换为
+   `github.com/leivorn/base-kit`,`go mod tidy` 去掉旧路径。
+2. 生成 Swagger 的 `--packagePrefix` 里的旧路径一并替换。
+
 ## [1.4.0] - 2026-10-08
 
 ### 安全
@@ -155,21 +169,21 @@ base-kit 的版本记录。格式参考 Keep a Changelog，版本号遵循语义
 
 ## [1.0.0] - 2026-09-02
 
-首个稳定版。API 与 v0.1.0 一致，配套 [base](https://github.com/xsxs89757/base) 模板 v2.0.0
+首个稳定版。API 与 v0.1.0 一致，配套 [base](https://github.com/leivorn/base) 模板 v2.0.0
 （模板的 `server/go.mod` 从此钉这个版本）。
 
 从这个版本起遵守上面的版本规则：MINOR 只增不改，数据库变更只增列，破坏性变更走 `/v2`。
-框架层的 bug 修复和新功能不必等模板发版，下游 `cd server && go get github.com/xsxs89757/base-kit@latest` 即可。
+框架层的 bug 修复和新功能不必等模板发版，下游 `cd server && go get github.com/leivorn/base-kit@latest` 即可。
 
 ### 验证
 
 - 模板 `server/main_test.go` 冒烟测试（启动 → 登录 → 用户信息 → 菜单 → Swagger）通过。
-- 用 `--parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit` 重新生成的
+- 用 `--parseDependencyLevel 3 --packagePrefix base,github.com/leivorn/base-kit` 重新生成的
   `swagger.json` 与抽库前逐字节一致。
 
 ## [0.1.0] - 2026-09-02
 
-从 [xsxs89757/base](https://github.com/xsxs89757/base) 的 `server/internal/` 抽出框架层与系统管理模块，
+从 [leivorn/base](https://github.com/leivorn/base) 的 `server/internal/` 抽出框架层与系统管理模块，
 首个可用版本（模板尚未切换过来，等 v1.0.0 一起发布）。
 
 ### 新增

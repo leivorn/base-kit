@@ -1,4 +1,4 @@
-module github.com/xsxs89757/base-kit
+module github.com/leivorn/base-kit
 
 go 1.25.0
 

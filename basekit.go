@@ -1,6 +1,6 @@
 // Package basekit 是 base 基底的后端框架层：配置、鉴权、权限码、数据层与系统管理模块。
 //
-// 项目从 https://github.com/xsxs89757/base 模板派生，模板的 server/main.go 只需要：
+// 项目从 https://github.com/leivorn/base 模板派生，模板的 server/main.go 只需要：
 //
 //	basekit.Run(basekit.Options{
 //	    Models: store.ProjectModels(),
@@ -8,7 +8,7 @@
 //	    Routes: router.Setup,
 //	})
 //
-// 框架层的 bug 修复和新功能通过 go get github.com/xsxs89757/base-kit@latest 获取，
+// 框架层的 bug 修复和新功能通过 go get github.com/leivorn/base-kit@latest 获取，
 // 不必再走 git merge。
 package basekit
 
@@ -17,14 +17,14 @@ import (
 	"log"
 	"os"
 
-	"github.com/xsxs89757/base-kit/config"
-	"github.com/xsxs89757/base-kit/router"
-	adminsvc "github.com/xsxs89757/base-kit/service/admin"
-	"github.com/xsxs89757/base-kit/store"
-	"github.com/xsxs89757/base-kit/validator"
+	"github.com/leivorn/base-kit/config"
+	"github.com/leivorn/base-kit/router"
+	adminsvc "github.com/leivorn/base-kit/service/admin"
+	"github.com/leivorn/base-kit/store"
+	"github.com/leivorn/base-kit/validator"
 
 	// 注册后台管理 DTO 的中文校验消息（init 副作用）
-	_ "github.com/xsxs89757/base-kit/validator/admin"
+	_ "github.com/leivorn/base-kit/validator/admin"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"

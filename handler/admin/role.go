@@ -5,12 +5,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xsxs89757/base-kit/dto"
-	admindto "github.com/xsxs89757/base-kit/dto/admin"
-	"github.com/xsxs89757/base-kit/middleware"
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
-	"github.com/xsxs89757/base-kit/store"
-	"github.com/xsxs89757/base-kit/validator"
+	"github.com/leivorn/base-kit/dto"
+	admindto "github.com/leivorn/base-kit/dto/admin"
+	"github.com/leivorn/base-kit/middleware"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
+	"github.com/leivorn/base-kit/store"
+	"github.com/leivorn/base-kit/validator"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"

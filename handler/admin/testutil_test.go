@@ -3,7 +3,7 @@ package admin
 import (
 	"time"
 
-	"github.com/xsxs89757/base-kit/model"
+	"github.com/leivorn/base-kit/model"
 )
 
 // modelBase 构造带指定创建时间的 BaseModel；GORM 在 Create 时保留非零的 CreatedAt。

@@ -1,6 +1,6 @@
 package admin
 
-import v "github.com/xsxs89757/base-kit/validator"
+import v "github.com/leivorn/base-kit/validator"
 
 func init() {
 	v.RegisterMessage("DeptRequest.Name.required", "部门名称不能为空")

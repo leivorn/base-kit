@@ -3,7 +3,7 @@ package admin
 import (
 	"time"
 
-	"github.com/xsxs89757/base-kit/model"
+	"github.com/leivorn/base-kit/model"
 )
 
 type User struct {

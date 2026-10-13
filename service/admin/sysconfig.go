@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"strings"
 
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
-	"github.com/xsxs89757/base-kit/store"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
+	"github.com/leivorn/base-kit/store"
 )
 
 // 运行时读取「系统配置」（sys_configs）。每次现查库：这几项只在登录、设密码时用到，

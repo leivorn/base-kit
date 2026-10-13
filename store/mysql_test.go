@@ -4,8 +4,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/xsxs89757/base-kit/config"
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
+	"github.com/leivorn/base-kit/config"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
 )
 
 // TestMySQLInitMigratesAndSeeds 在真实 MySQL 上跑一遍 Init：建表 + 迁移 + 种子数据。

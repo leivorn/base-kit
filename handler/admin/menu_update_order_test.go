@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"testing"
 
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
-	"github.com/xsxs89757/base-kit/store"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
+	"github.com/leivorn/base-kit/store"
 
 	"github.com/gofiber/fiber/v2"
 )

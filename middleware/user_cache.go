@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
-	"github.com/xsxs89757/base-kit/store"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
+	"github.com/leivorn/base-kit/store"
 )
 
 // 用户鉴权信息缓存：JWTAuth 每个请求都要确认用户状态和当前角色，直接查库会把两次

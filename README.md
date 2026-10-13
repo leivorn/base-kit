@@ -1,12 +1,12 @@
 # base-kit
 
-[base 基底](https://github.com/xsxs89757/base) 的后端框架层：配置、JWT 鉴权、菜单权限码 RBAC、
+[base 基底](https://github.com/leivorn/base) 的后端框架层：配置、JWT 鉴权、菜单权限码 RBAC、
 数据层与整套系统管理模块（用户 / 角色 / 菜单 / 部门 / 配置 / 操作日志）。
 
 项目从 base 模板派生，模板负责 `main.go`、业务代码和整个前端；框架层的 bug 修复和新功能
-走 `go get github.com/xsxs89757/base-kit@latest`，不必再靠 git merge 一个个文件合。
+走 `go get github.com/leivorn/base-kit@latest`，不必再靠 git merge 一个个文件合。
 
-> 代码历史：这些包原先在 [xsxs89757/base](https://github.com/xsxs89757/base) 的 `server/internal/`
+> 代码历史：这些包原先在 [leivorn/base](https://github.com/leivorn/base) 的 `server/internal/`
 > 下，`bf985b6` 之前的提交记录在那个仓库里。
 
 ## 用法
@@ -15,7 +15,7 @@
 package main
 
 import (
-    "github.com/xsxs89757/base-kit"
+    "github.com/leivorn/base-kit"
 
     "base/internal/router"
     "base/internal/store"
@@ -170,7 +170,7 @@ Routes: func(app *fiber.App) {
 
 ```bash
 cd server
-go run github.com/xsxs89757/base-kit/cmd/basekit-migrate ./...   # 版本跟随 go.mod 里钉的 kit
+go run github.com/leivorn/base-kit/cmd/basekit-migrate ./...   # 版本跟随 go.mod 里钉的 kit
 go mod tidy
 ```
 

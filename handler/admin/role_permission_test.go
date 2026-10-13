@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"testing"
 
-	adminmodel "github.com/xsxs89757/base-kit/model/admin"
-	"github.com/xsxs89757/base-kit/store"
-	"github.com/xsxs89757/base-kit/validator"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
+	"github.com/leivorn/base-kit/store"
+	"github.com/leivorn/base-kit/validator"
 
 	"github.com/glebarez/sqlite"
 	"github.com/gofiber/fiber/v2"

@@ -53,8 +53,8 @@ var _ = util.Ping
 	}
 	out := string(got)
 	for _, want := range []string{
-		`"github.com/xsxs89757/base-kit/config"`,
-		`admindto "github.com/xsxs89757/base-kit/dto/admin"`,
+		`"github.com/leivorn/base-kit/config"`,
+		`admindto "github.com/leivorn/base-kit/dto/admin"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("缺少改写结果 %s\n实际:\n%s", want, out)
