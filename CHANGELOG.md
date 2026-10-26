@@ -7,6 +7,23 @@ base-kit 的版本记录。格式参考 Keep a Changelog，版本号遵循语义
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-10-26
+
+### 修复
+
+- `SyncSeedMenu` / `SyncSeedMenus` 更新已存在的菜单时补上 Vben meta 字段：`active_icon`、`active_path`、
+  `hide_in_menu`、`hide_in_breadcrumb`、`hide_in_tab`、`hide_children_in_menu`、`badge_type`、`badge`、
+  `badge_variants`。此前这些字段只在首次建菜单时写入：下游先建了菜单，后来在 `Options.Seed` 里补上
+  `HideInMenu: true` / `ActivePath` 把它改成独立详情页的隐藏菜单，已有的库不生效，侧栏照样显示。现在它们和
+  path、title 等字段一样，每次启动按种子定义写回（改回 `false` / 空串也能写回）；`status` 仍不同步。
+
+### 升级步骤
+
+1. `cd server && go get github.com/leivorn/base-kit@v1.5.1`。
+2. 升级后首次启动会按种子覆盖上面这些字段。在「菜单管理」里给种子菜单（kit 自带的仪表盘、系统管理各菜单，
+   或下游 `Options.Seed` 里登记的菜单）手动设过隐藏、激活路径、徽章等的，会被改回种子定义的值（kit 自带菜单
+   都是默认值）；要保留就写进种子定义。没手改过的无需操作。
+
 ## [1.5.0] - 2026-10-13
 
 ### 模块路径

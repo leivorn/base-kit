@@ -380,6 +380,10 @@ func RefreshRoleMenus() {
 }
 
 // SyncSeedMenu 按 name 幂等地新增或更新一条菜单，返回菜单本身与「是否新建」。
+//
+// 菜单已存在时以种子定义为准：下面 updates 里的列（含 hide_in_menu、active_path 等 Vben meta 字段）
+// 每次启动都按种子写回，在「菜单管理」里手改过的这些字段会被覆盖，要长期保留就改种子定义。
+// status 不在其中，「菜单管理」里的启用/停用不会被重启恢复。
 func SyncSeedMenu(menu adminmodel.Menu, parentName string) (adminmodel.Menu, bool) {
 	if parentName != "" {
 		var parent adminmodel.Menu
@@ -394,20 +398,30 @@ func SyncSeedMenu(menu adminmodel.Menu, parentName string) (adminmodel.Menu, boo
 		return menu, true
 	}
 
+	// 用 map 而不是结构体 Updates：bool 改回 false、字符串清空也要能落库。
 	updates := map[string]any{
-		"parent_id":  menu.ParentID,
-		"path":       menu.Path,
-		"component":  menu.Component,
-		"redirect":   menu.Redirect,
-		"type":       menu.Type,
-		"icon":       menu.Icon,
-		"title":      menu.Title,
-		"auth_code":  menu.AuthCode,
-		"order_no":   menu.OrderNo,
-		"keep_alive": menu.KeepAlive,
-		"affix_tab":  menu.AffixTab,
-		"iframe_src": menu.IframeSrc,
-		"link":       menu.Link,
+		"parent_id":             menu.ParentID,
+		"path":                  menu.Path,
+		"component":             menu.Component,
+		"redirect":              menu.Redirect,
+		"type":                  menu.Type,
+		"icon":                  menu.Icon,
+		"title":                 menu.Title,
+		"auth_code":             menu.AuthCode,
+		"order_no":              menu.OrderNo,
+		"keep_alive":            menu.KeepAlive,
+		"affix_tab":             menu.AffixTab,
+		"iframe_src":            menu.IframeSrc,
+		"link":                  menu.Link,
+		"active_icon":           menu.ActiveIcon,
+		"active_path":           menu.ActivePath,
+		"hide_in_menu":          menu.HideInMenu,
+		"hide_in_breadcrumb":    menu.HideInBreadcrumb,
+		"hide_in_tab":           menu.HideInTab,
+		"hide_children_in_menu": menu.HideChildrenInMenu,
+		"badge_type":            menu.BadgeType,
+		"badge":                 menu.Badge,
+		"badge_variants":        menu.BadgeVariants,
 	}
 	DB.Model(&exists).Updates(updates)
 	DB.First(&exists, exists.ID)

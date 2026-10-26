@@ -89,6 +89,63 @@ func TestSeedMenusBackfillsAuthCodeForExistingMenus(t *testing.T) {
 	}
 }
 
+// menuMeta 是 Menu 的 Vben meta 装饰字段，整组比较用。
+type menuMeta struct {
+	ActiveIcon, ActivePath, BadgeType, Badge, BadgeVariants     string
+	HideInMenu, HideInBreadcrumb, HideInTab, HideChildrenInMenu bool
+}
+
+func loadMenuMeta(t *testing.T, name string) menuMeta {
+	t.Helper()
+	var m adminmodel.Menu
+	if err := DB.Where("name = ?", name).First(&m).Error; err != nil {
+		t.Fatalf("load menu %s: %v", name, err)
+	}
+	return menuMeta{
+		ActiveIcon: m.ActiveIcon, ActivePath: m.ActivePath, BadgeType: m.BadgeType, Badge: m.Badge, BadgeVariants: m.BadgeVariants,
+		HideInMenu: m.HideInMenu, HideInBreadcrumb: m.HideInBreadcrumb, HideInTab: m.HideInTab, HideChildrenInMenu: m.HideChildrenInMenu,
+	}
+}
+
+// 下游先建了详情页菜单，后来才在种子里补 HideInMenu / ActivePath 做成隐藏菜单：已存在的菜单也要按种子写入。
+func TestSyncSeedMenuSyncsMetaFieldsOfExistingMenu(t *testing.T) {
+	openTestDB(t, false, &adminmodel.Menu{})
+
+	plain := adminmodel.Menu{Name: "DemoOrderDetail", Path: "/demo/order/detail/:id", Component: "/demo/order/detail", Type: "menu", Title: "demo.order.detail", Status: 1}
+	if _, isNew := SyncSeedMenu(plain, ""); !isNew {
+		t.Fatal("first sync should create the menu")
+	}
+
+	hidden := plain
+	hidden.ActiveIcon = "carbon:document"
+	hidden.ActivePath = "/demo/order"
+	hidden.HideInMenu = true
+	hidden.HideInBreadcrumb = true
+	hidden.HideInTab = true
+	hidden.HideChildrenInMenu = true
+	hidden.BadgeType = "dot"
+	hidden.Badge = "new"
+	hidden.BadgeVariants = "primary"
+	if _, isNew := SyncSeedMenu(hidden, ""); isNew {
+		t.Fatal("second sync should update the existing menu, not create one")
+	}
+	want := menuMeta{
+		ActiveIcon: "carbon:document", ActivePath: "/demo/order", BadgeType: "dot", Badge: "new", BadgeVariants: "primary",
+		HideInMenu: true, HideInBreadcrumb: true, HideInTab: true, HideChildrenInMenu: true,
+	}
+	if got := loadMenuMeta(t, plain.Name); got != want {
+		t.Fatalf("meta after sync = %+v, want %+v", got, want)
+	}
+
+	// 改回默认值：false 和空串同样要写回，不能被当成零值跳过。
+	if _, isNew := SyncSeedMenu(plain, ""); isNew {
+		t.Fatal("third sync should update the existing menu, not create one")
+	}
+	if got := loadMenuMeta(t, plain.Name); got != (menuMeta{}) {
+		t.Fatalf("meta after reverting = %+v, want all zero", got)
+	}
+}
+
 func TestSeedUsersRenamesLegacyRootAccountToSuper(t *testing.T) {
 	db, err := gorm.Open(sqlite.Open(t.TempDir()+"/test.db"), &gorm.Config{})
 	if err != nil {
