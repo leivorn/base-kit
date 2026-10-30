@@ -209,6 +209,9 @@ Type=notify
 NotifyAccess=all
 ExecStart=/opt/app/server/app
 ExecReload=/bin/kill -HUP $MAINPID
+# 必须有：平滑重启后的主进程不是 systemd 起的（MAINPID 报上来的），systemd（252 实测）stop 时对它发完 SIGTERM 不等，
+# 立刻 SIGKILL，进行中的请求全断。自己发 SIGTERM、等它退出，再交给 systemd 收尾
+ExecStop=/bin/sh -c 'kill -TERM $MAINPID 2>/dev/null; while kill -0 $MAINPID 2>/dev/null; do sleep 0.2; done'
 Restart=always
 # 收尾：ShutdownTimeout 20 秒 + 后台任务 10 秒，留余量
 TimeoutStopSec=60

@@ -25,7 +25,8 @@ base-kit 的版本记录。格式参考 Keep a Changelog，版本号遵循语义
 ### 升级步骤
 
 1. `cd server && go get github.com/leivorn/base-kit@v1.7.0`。不改 systemd 单元就与 1.6.0 行为一致。
-2. 要平滑重启：单元改成 `Type=notify`、`NotifyAccess=all`、`ExecReload=/bin/kill -HUP $MAINPID`，`TimeoutStopSec` 不小于 60；
+2. 要平滑重启：单元改成 `Type=notify`、`NotifyAccess=all`、`ExecReload=/bin/kill -HUP $MAINPID`，加上 README 里那行
+   `ExecStop=`（否则 reload 过以后 stop / restart 时 systemd 不等主进程、直接 SIGKILL），`TimeoutStopSec` 不小于 60；
    换单元后 `systemctl daemon-reload && systemctl restart` 一次（这一次会断开进行中的请求），以后发布换完程序文件用
    `systemctl reload`，并确认 `MainPID` 换了。细节见 README「监听地址与平滑重启」。
 3. 只给本机 nginx 用的服务在 `config.yaml` 的 `server` 段加 `host: 127.0.0.1`（或单元里 `Environment=SERVER_HOST=127.0.0.1`），
