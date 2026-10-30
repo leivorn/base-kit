@@ -7,6 +7,40 @@ base-kit 的版本记录。格式参考 Keep a Changelog，版本号遵循语义
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-30
+
+### 新增
+
+- 配置 `database.seed`：启动时种子数据的写法。默认 `full`（空串同），与此前完全一样。
+  - `insert`：只补缺。缺的角色、菜单（含按钮）、用户、部门、配置项照建；已有的一律不改。不清理软删行、不删遗留演示菜单、
+    生产模式不删 `admin` / `jack`、不把菜单重新授给 super / admin 角色。
+  - `off`：不写任何种子数据，只做 AutoMigrate（只加表、加列）。
+  - 用在和别的系统共用 `sys_*` 表的库上（例如新老后台切换期间），免得每次启动按种子改写别人的菜单、把全部菜单
+    授给 `admin` 角色、删掉叫 `admin` 的账号、物理删除软删的角色和用户。
+  - `Options.Seed` 在三种模式下都会被调用（模板垫片要在里面拿到 `DB`）。kit 的种子助手跟随模式：
+    `SyncSeedMenus` / `SyncSeedMenu` 在 `insert` 下只建缺的、在 `off` 下什么都不写，`RefreshRoleMenus`、
+    `RemoveLegacySeedMenus` 只在 `full` 下生效。下游 Seed 里自己写的数据用 `store.CurrentSeedMode()` 判断。
+  - 取值写错（不是 full / insert / off）时启动失败，不会悄悄按 full 跑。
+- 操作日志扩展列：`middleware.RegisterOperationLogExtra(func(c *fiber.Ctx, cols map[string]any))` 在 handler
+  执行完后调用，往 `cols` 里放「列名 → 值」（如业务备注、响应体），和基底字段在同一条 INSERT 里写进
+  `sys_operation_logs`。列要先用扩展结构加到表上；字符串整理成合法 UTF-8 并拷贝，超过 64KB 截断；基底字段不能覆盖，
+  非 snake_case 的列名忽略；扩展列写不进去时退回只写基底字段，日志不丢。没登记时写库路径不变。
+
+### 修复
+
+- 扩展结构（「给基底的表加列」）与基底模型同表时，基底的列不再丢失。此前 `Options.Models` 和基底模型放在同一次
+  AutoMigrate 里，GORM 按表名去重、只迁移后一个结构：新库上 `sys_operation_logs` 只建出扩展列，操作日志全部写失败；
+  老库上基底新加的列不再补。现在与基底同表的下游模型在基底模型之后单独迁移。
+- `login_captcha` 配置项这一行不存在时按种子的默认值判断（生产开、开发关），不再一律视为关闭；存在但停用仍视为关闭。
+  `full` 模式下这一行总会被种上，行为不变；`off` 模式下新建的 `sys_configs` 是空表，生产上验证码默认开启。
+
+### 升级步骤
+
+1. `cd server && go get github.com/leivorn/base-kit@v1.6.0`。默认 `full`，不改配置就与 1.5.1 行为一致，无需其他操作。
+2. 库和别的系统共用时，在 `config.yaml` 的 `database` 段加 `seed: off`（或 `insert`）。`off` 只适合已经有超管账号的库：
+   新库用 `off` 启动没有任何账号，进不去后台。
+3. 以前为绕开同表扩展的迁移问题、在 Seed 里自己 AutoMigrate 扩展结构的，可以挪回 `Options.Models`。
+
 ## [1.5.1] - 2026-10-26
 
 ### 修复

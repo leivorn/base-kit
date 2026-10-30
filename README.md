@@ -62,7 +62,8 @@ type UserExtension struct {
 func (UserExtension) TableName() string { return "sys_users" }
 ```
 
-AutoMigrate 只增不删，kit 先建表、这个结构随后迁移同一张表，只会补上新列。
+AutoMigrate 只增不删，kit 先建表、这个结构随后迁移同一张表，只会补上新列（与基底同表的下游模型在基底模型之后
+单独迁移；1.6.0 之前放在同一次 AutoMigrate 里，新库会只建出扩展列）。
 
 **不要嵌入 `adminmodel.User`。** 嵌入会把 `Roles` many2many 一起带过来，GORM 按新结构体名
 派生外键，往共享的 `user_roles` 表里加一列 `<新结构名>_id`；通过嵌入结构写入时 `user_id` 是 NULL，
@@ -71,6 +72,53 @@ AutoMigrate 只增不删，kit 先建表、这个结构随后迁移同一张表�
 
 改字段之外的需求（比如给用户加一段结构化档案），更推荐旁表：`biz_user_profiles{user_id uniqueIndex, ...}`，
 与 kit 零耦合。
+
+## 种子数据的写法
+
+`config.yaml` 的 `database.seed` 控制每次启动时种子数据怎么写：
+
+| 取值 | 行为 |
+| --- | --- |
+| `full`（默认，留空同） | 建缺的、按种子定义写回已有的菜单、新菜单授给 super/admin 角色、清理软删行与遗留演示菜单、生产模式删 `admin`/`jack` |
+| `insert` | 只补缺：缺的照建，已有的一律不改、不删、不重新授权 |
+| `off` | 不写任何种子数据，只做 AutoMigrate（只加表、加列） |
+
+库只给本项目用时用默认值。和别的系统共用 `sys_*` 表时（例如新老后台切换期间）用 `insert` 或 `off`，免得每次启动
+改到别人的菜单、角色授权和账号。`off` 只适合已经有超管账号的库，新库用它启动没有任何账号。
+
+`Options.Seed` 三种模式下都会被调用（模板垫片要在里面拿到 `DB`）。`SyncSeedMenus` / `SyncSeedMenu` /
+`RefreshRoleMenus` / `RemoveLegacySeedMenus` 自己跟随模式；下游 Seed 里自己写的数据要判断一下：
+
+```go
+func projectSeed() {
+    if store.CurrentSeedMode() == store.SeedOff { // kitstore "github.com/leivorn/base-kit/store"
+        return
+    }
+    // ...
+}
+```
+
+`off` 模式下 `sys_configs` 可能没有任何配置项：`login_captcha` 缺行时按生产开、开发关，`password_min_length` 缺行时取 8。
+
+## 操作日志的扩展列
+
+给 `sys_operation_logs` 加了列（见上一节）之后，用 `middleware.RegisterOperationLogExtra` 往同一条日志里写：
+
+```go
+type remarksKey struct{}
+
+// handler 里：c.Locals(remarksKey{}, "订单迁移：订单 1，原用户 2 → 迁移用户 3")
+middleware.RegisterOperationLogExtra(func(c *fiber.Ctx, cols map[string]any) {
+    if remarks, ok := c.Locals(remarksKey{}).(string); ok {
+        cols["remarks"] = remarks
+    }
+    cols["resp"] = truncate(string(c.Response().Body()), 2048) // 列宽自己控制
+})
+```
+
+取值函数在 handler 执行完、日志入队前调用，只对记日志的写操作调用；handler 返回 error 时响应体还是空的。
+扩展列和基底字段在同一条 INSERT 里写入；基底字段不能覆盖；扩展列写不进去（比如表上没有这一列）时退回只写基底字段。
+登记在 `Routes` 里做（`app.Listen` 之前，不加锁）。
 
 ## 覆盖基底的接口
 

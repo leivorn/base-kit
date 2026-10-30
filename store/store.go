@@ -98,6 +98,12 @@ type Options struct {
 func Init(opts Options) error {
 	cfg := config.C.Database
 
+	mode, err := ParseSeedMode(cfg.Seed)
+	if err != nil {
+		return err
+	}
+	seedMode = mode
+
 	dial, err := dialector(cfg.Driver, cfg.DSN)
 	if err != nil {
 		return fmt.Errorf("database config error: %w", err)
@@ -132,17 +138,66 @@ func Init(opts Options) error {
 		&adminmodel.Config{},
 		&adminmodel.OperationLog{},
 	}
-	models = append(models, opts.Models...)
-	if err = DB.AutoMigrate(models...); err != nil {
+	if err = migrate(models, opts.Models); err != nil {
 		return fmt.Errorf("failed to migrate database: %w", err)
 	}
 
-	purgeLegacySoftDeleted()
-	seed()
+	switch seedMode {
+	case SeedFull:
+		purgeLegacySoftDeleted()
+		seed()
+	case SeedInsert:
+		log.Println("  [seed] mode=insert: only missing rows are inserted, existing data is left untouched")
+		seed()
+	case SeedOff:
+		log.Println("  [seed] mode=off: seed data skipped, only AutoMigrate ran")
+	}
+	// off 模式也要调：模板垫片在 ProjectSeed 里拿到 DB；下游自己的写入用 CurrentSeedMode 判断
 	if opts.Seed != nil {
 		opts.Seed(DB)
 	}
 	return nil
+}
+
+// migrate 先迁移基底模型和不与之同表的下游模型，再逐个迁移与前面同表的下游模型（「给基底的表加列」的扩展结构）。
+//
+// GORM 一次 AutoMigrate 里按表名去重，同一张表只迁移最后一个结构：扩展结构和基底模型放在一起时，
+// 新库上建出来的表只有扩展结构那几列，基底的列全没了（下游真实案例：sys_operation_logs 只剩 id/remarks/resp，
+// 操作日志全部写失败）；老库上则是基底新加的列不再补。分两轮后第二轮的表已存在，只会补列。
+func migrate(base []any, extra []any) error {
+	first := append([]any(nil), base...)
+	var later []any
+	seen := map[string]bool{}
+	for _, m := range base {
+		seen[tableOf(m)] = true
+	}
+	for _, m := range extra {
+		table := tableOf(m)
+		if table != "" && seen[table] {
+			later = append(later, m)
+			continue
+		}
+		seen[table] = true
+		first = append(first, m)
+	}
+	if err := DB.AutoMigrate(first...); err != nil {
+		return err
+	}
+	for _, m := range later {
+		if err := DB.AutoMigrate(m); err != nil {
+			return fmt.Errorf("migrate %T: %w", m, err)
+		}
+	}
+	return nil
+}
+
+// tableOf 取模型的表名，解析失败时返回空串（交给 AutoMigrate 自己报错）。
+func tableOf(model any) string {
+	stmt := &gorm.Statement{DB: DB}
+	if err := stmt.Parse(model); err != nil {
+		return ""
+	}
+	return stmt.Schema.Table
 }
 
 // purgeLegacySoftDeleted 物理清理角色/用户/配置表里历史遗留的软删除行。
@@ -332,6 +387,9 @@ func seedMenus() {
 // RemoveLegacySeedMenus 按 name + component 精确删除已废弃的种子菜单及其角色关联。
 // 只匹配 name 会误删下游自己建的同名菜单。
 func RemoveLegacySeedMenus(defs []adminmodel.Menu) {
+	if !seedUpdatesAllowed() {
+		return
+	}
 	var ids []uint
 	var names []string
 	for _, d := range defs {
@@ -360,7 +418,13 @@ func RemoveLegacySeedMenus(defs []adminmodel.Menu) {
 
 // RefreshRoleMenus 把当前全部菜单重新授予 super 和 admin 角色。
 // 下游 Seed 里新增菜单后要调一次，否则新菜单对这两个角色不可见。
+//
+// 只在 full 模式下生效：insert / off 模式不重新授权（super 角色本来就看得到全部菜单，
+// 其他角色的授权交给「角色管理」），免得共用的库里别人的角色被授予全部菜单。
 func RefreshRoleMenus() {
+	if !seedUpdatesAllowed() {
+		return
+	}
 	var superRole, adminRole adminmodel.Role
 	if DB.Where("code = ?", "super").First(&superRole).Error != nil {
 		return
@@ -384,6 +448,8 @@ func RefreshRoleMenus() {
 // 菜单已存在时以种子定义为准：下面 updates 里的列（含 hide_in_menu、active_path 等 Vben meta 字段）
 // 每次启动都按种子写回，在「菜单管理」里手改过的这些字段会被覆盖，要长期保留就改种子定义。
 // status 不在其中，「菜单管理」里的启用/停用不会被重启恢复。
+//
+// 种子模式 insert 下只建缺的、已存在的原样返回；off 下什么都不写（缺的菜单返回未落库的 menu，ID 为 0）。
 func SyncSeedMenu(menu adminmodel.Menu, parentName string) (adminmodel.Menu, bool) {
 	if parentName != "" {
 		var parent adminmodel.Menu
@@ -394,8 +460,14 @@ func SyncSeedMenu(menu adminmodel.Menu, parentName string) (adminmodel.Menu, boo
 
 	var exists adminmodel.Menu
 	if DB.Where("name = ?", menu.Name).First(&exists).Error != nil {
+		if !seedInsertsAllowed() {
+			return menu, false
+		}
 		DB.Create(&menu)
 		return menu, true
+	}
+	if !seedUpdatesAllowed() {
+		return exists, false
 	}
 
 	// 用 map 而不是结构体 Updates：bool 改回 false、字符串清空也要能落库。
@@ -459,7 +531,11 @@ func RandomPassword() string {
 }
 
 func seedUsers() {
-	renameLegacyRootUser()
+	// insert 模式只补缺：不改名、不删演示账号、不改首页
+	full := seedUpdatesAllowed()
+	if full {
+		renameLegacyRootUser()
+	}
 
 	userDefs := []struct {
 		Username string
@@ -475,7 +551,9 @@ func seedUsers() {
 	// 老库里残留的（曾用开发模式启动过、或早期版本种下的）也一并删掉
 	if config.IsProduction() {
 		userDefs = userDefs[:1]
-		purgeDemoUsers()
+		if full {
+			purgeDemoUsers()
+		}
 	}
 
 	production := config.IsProduction()
@@ -516,7 +594,9 @@ func seedUsers() {
 	}
 
 	// 早期种子把 jack 的首页指向已删除的 /analytics，统一迁到 /workspace
-	DB.Model(&adminmodel.User{}).Where("home_path = ?", "/analytics").Update("home_path", "/workspace")
+	if full {
+		DB.Model(&adminmodel.User{}).Where("home_path = ?", "/analytics").Update("home_path", "/workspace")
+	}
 
 	warnDefaultSuperPassword()
 }
@@ -625,7 +705,7 @@ func seedConfigs() {
 		var exists adminmodel.Config
 		if DB.Where("config_key = ?", cfg.ConfigKey).First(&exists).Error == nil {
 			// 早期种子没填名称，而后台编辑配置要求名称必填，不补上就改不了这些配置
-			if exists.ConfigName == "" {
+			if exists.ConfigName == "" && seedUpdatesAllowed() {
 				DB.Model(&exists).Update("config_name", cfg.ConfigName)
 			}
 			continue

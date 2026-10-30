@@ -12,6 +12,10 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/leivorn/base-kit/config"
+	adminmodel "github.com/leivorn/base-kit/model/admin"
+	"github.com/leivorn/base-kit/store"
 )
 
 func decodeDataURI(t *testing.T, uri, prefix string, decode func(*bytes.Reader) (image.Image, error)) image.Image {
@@ -180,5 +184,37 @@ func TestCaptchaFailuresShareIPLimit(t *testing.T) {
 	}
 	if l.locked("anyone", "5.6.7.8") != 0 {
 		t.Fatal("其他来源不受影响")
+	}
+}
+
+// 种子模式 off 时 sys_configs 可能还没有 login_captcha 这一行：按种子的默认值（生产开、开发关），
+// 不能因为缺行就在生产上关掉验证码；行存在但停用时仍视为关闭。
+func TestCaptchaEnabledFallsBackWhenRowMissing(t *testing.T) {
+	useTestDB(t)
+	saved := config.C
+	t.Cleanup(func() { config.C = saved })
+
+	for _, tc := range []struct {
+		mode string
+		row  *adminmodel.Config
+		want bool
+	}{
+		{mode: "production", want: true},
+		{mode: "development", want: false},
+		{mode: "production", row: &adminmodel.Config{ConfigValue: "false", Status: 1}, want: false},
+		{mode: "production", row: &adminmodel.Config{ConfigValue: "true", Status: 0}, want: false},
+		{mode: "development", row: &adminmodel.Config{ConfigValue: "true", Status: 1}, want: true},
+	} {
+		config.C.Server.Mode = tc.mode
+		store.DB.Unscoped().Where("config_key = ?", CaptchaConfigKey).Delete(&adminmodel.Config{})
+		if tc.row != nil {
+			tc.row.ConfigKey = CaptchaConfigKey
+			if err := store.DB.Create(tc.row).Error; err != nil {
+				t.Fatalf("写配置: %v", err)
+			}
+		}
+		if got := CaptchaEnabled(); got != tc.want {
+			t.Errorf("mode=%s row=%+v: CaptchaEnabled = %v, want %v", tc.mode, tc.row, got, tc.want)
+		}
 	}
 }

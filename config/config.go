@@ -33,6 +33,9 @@ type ServerConfig struct {
 type DatabaseConfig struct {
 	Driver string `yaml:"driver"`
 	DSN    string `yaml:"dsn"`
+	// Seed 启动时种子数据的写法：full（默认，空串同）/ insert（只补缺）/ off（不写），见 store.SeedMode。
+	// 库和别的系统共用时用 insert 或 off，免得种子改写别人的菜单、角色授权和账号。
+	Seed string `yaml:"seed"`
 }
 
 type JWTConfig struct {

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/leivorn/base-kit/config"
 )
 
 // 后台登录拼图滑块验证码：系统配置 login_captcha 开启时，登录前必须把拼图块拖进缺口。
@@ -44,7 +46,15 @@ const (
 )
 
 // CaptchaEnabled 报告登录是否需要验证码（系统配置 login_captcha）。
-func CaptchaEnabled() bool { return ConfigBool(CaptchaConfigKey) }
+//
+// 配置项这一行不存在时（种子模式 off 下库里还没有这一行，或被删了还没重启）按种子的默认值：
+// 生产开、开发关；存在但停用（status=0）时视为关闭，与此前一致。
+func CaptchaEnabled() bool {
+	if !configExists(CaptchaConfigKey) {
+		return config.IsProduction()
+	}
+	return ConfigBool(CaptchaConfigKey)
+}
 
 // PuzzleCaptcha 一张拼图验证码。坐标都按背景图原始像素。
 type PuzzleCaptcha struct {

@@ -51,4 +51,26 @@ func TestMySQLInitMigratesAndSeeds(t *testing.T) {
 	if !DB.Migrator().HasColumn(&userExtension{}, "dept") {
 		t.Error("MySQL 上扩展列 dept 未添加")
 	}
+
+	// 扩展结构登记进 Options.Models、种子 off 再启动一次：同表的两边列都在，种子数据一行不动
+	var before int64
+	DB.Model(&adminmodel.RoleMenu{}).Count(&before)
+	config.C.Database.Seed = "off"
+	config.C.Server.Mode = "production"
+	if err := Init(Options{Models: []any{&opLogExtension{}, &userExtension{}}}); err != nil {
+		t.Fatalf("MySQL Init（seed=off，同表扩展）: %v", err)
+	}
+	for _, c := range []struct {
+		model any
+		col   string
+	}{{&adminmodel.OperationLog{}, "body"}, {&opLogExtension{}, "remarks"}, {&adminmodel.User{}, "password_changed_at"}, {&userExtension{}, "dept"}} {
+		if !DB.Migrator().HasColumn(c.model, c.col) {
+			t.Errorf("MySQL 上 %T 缺列 %s", c.model, c.col)
+		}
+	}
+	var after int64
+	DB.Model(&adminmodel.RoleMenu{}).Count(&after)
+	if after != before {
+		t.Errorf("seed=off 改动了 role_menus: %d -> %d", before, after)
+	}
 }

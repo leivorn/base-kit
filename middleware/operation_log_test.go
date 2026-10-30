@@ -23,11 +23,11 @@ import (
 )
 
 // captureOperationLogs 让 OperationLog 中间件把条目交给测试，而不是由后台 writer 异步写进 store.DB。
-func captureOperationLogs(t *testing.T) <-chan adminmodel.OperationLog {
+func captureOperationLogs(t *testing.T) <-chan opLogEntry {
 	t.Helper()
 	opLogOnce.Do(func() {}) // 本测试进程里不再启动真实 writer
 	saved := opLogCh
-	ch := make(chan adminmodel.OperationLog, 16)
+	ch := make(chan opLogEntry, 16)
 	opLogCh = ch
 	t.Cleanup(func() { opLogCh = saved })
 	return ch
@@ -42,7 +42,7 @@ func operationLogApp() *fiber.App {
 }
 
 // recordOperationLog 发一个请求并取出它产生的日志条目。app.Test 等 handler 链跑完才返回，条目此时已入队。
-func recordOperationLog(t *testing.T, app *fiber.App, logs <-chan adminmodel.OperationLog, req *http.Request) adminmodel.OperationLog {
+func recordOperationLog(t *testing.T, app *fiber.App, logs <-chan opLogEntry, req *http.Request) adminmodel.OperationLog {
 	t.Helper()
 	resp, err := app.Test(req)
 	if err != nil {
@@ -51,7 +51,7 @@ func recordOperationLog(t *testing.T, app *fiber.App, logs <-chan adminmodel.Ope
 	resp.Body.Close()
 	select {
 	case entry := <-logs:
-		return entry
+		return entry.OperationLog
 	default:
 		t.Fatalf("%s %s 没有产生操作日志", req.Method, req.URL.Path)
 		return adminmodel.OperationLog{}

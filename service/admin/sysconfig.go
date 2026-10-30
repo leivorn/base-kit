@@ -22,6 +22,15 @@ func ConfigValue(key string) (string, bool) {
 	return strings.TrimSpace(cfg.ConfigValue), true
 }
 
+// configExists 报告配置项这一行是否存在（不论启用与否）。查询出错时按存在处理，交给 ConfigValue 的口径。
+func configExists(key string) bool {
+	var count int64
+	if err := store.DB.Model(&adminmodel.Config{}).Where("config_key = ?", key).Count(&count).Error; err != nil {
+		return true
+	}
+	return count > 0
+}
+
 // ConfigBool 把 true/1/yes/on（忽略大小写）当作开启，其余（含缺失、停用）都是关闭。
 func ConfigBool(key string) bool {
 	v, ok := ConfigValue(key)

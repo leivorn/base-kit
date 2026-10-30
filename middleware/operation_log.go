@@ -132,20 +132,126 @@ func multipartSummary(form *multipart.Form) string {
 	return strings.TrimSuffix(buf.String(), "\n")
 }
 
+// opLogEntry 是排队等 writer 写库的一条日志：基底字段加下游登记的扩展列。
+type opLogEntry struct {
+	adminmodel.OperationLog
+	extra map[string]any
+}
+
 var (
 	opLogOnce sync.Once
-	opLogCh   chan adminmodel.OperationLog
+	opLogCh   chan opLogEntry
 )
+
+// OperationLogExtraFunc 给操作日志补扩展列：在 handler 执行完之后、日志入队之前调用，这时能读到
+// 响应体（c.Response().Body()）和 handler 放进 Locals 的数据。往 cols 里放「列名 → 值」，
+// 它们和基底字段在同一条 INSERT 里写进 sys_operation_logs。
+//
+// 列要先加到表上：只声明表名、主键和新列的扩展结构登记到 Options.Models（README「给基底的表加列」）。
+// 字符串值会被整理成合法 UTF-8 并拷贝（Fiber 的缓冲区会被下一个请求复用），超过 64KB 截断；
+// 列宽更小的，下游自己先截好。基底字段（id、path、body 等）不能覆盖，写了会被忽略。
+type OperationLogExtraFunc func(c *fiber.Ctx, cols map[string]any)
+
+var opLogExtras []OperationLogExtraFunc
+
+// RegisterOperationLogExtra 登记扩展列的取值函数，例如业务备注和响应体：
+//
+//	middleware.RegisterOperationLogExtra(func(c *fiber.Ctx, cols map[string]any) {
+//	    if remarks, ok := c.Locals(remarksKey{}).(string); ok {
+//	        cols["remarks"] = remarks
+//	    }
+//	    cols["resp"] = truncate(string(c.Response().Body()), 2048)
+//	})
+//
+// 只对会记日志的写操作（POST/PUT/DELETE 等）调用。handler 返回 error 时 Fiber 的 ErrorHandler 还没跑，
+// 这时的响应体是空的。须在 app.Listen 之前调用（不加锁），通常放在 Routes 里。
+func RegisterOperationLogExtra(fn OperationLogExtraFunc) {
+	opLogExtras = append(opLogExtras, fn)
+}
+
+// opLogBaseColumns 是基底字段的列名，扩展列不能覆盖它们。
+var opLogBaseColumns = map[string]bool{
+	"id": true, "created_at": true, "user_id": true, "username": true, "method": true, "path": true,
+	"status": true, "duration": true, "ip": true, "user_agent": true, "body": true,
+}
+
+// opLogColumnRe 限制扩展列名：小写字母开头的 snake_case，避免奇怪的列名进 SQL。
+var opLogColumnRe = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+
+// opLogExtraTextLimit 是扩展列字符串的上限，与 MySQL TEXT 的 65535 字节一致。
+const opLogExtraTextLimit = 65535
+
+// collectOperationLogExtra 调用登记的取值函数，整理出能安全入库的扩展列。没有登记或都没给值时返回 nil。
+func collectOperationLogExtra(c *fiber.Ctx) map[string]any {
+	if len(opLogExtras) == 0 {
+		return nil
+	}
+	cols := map[string]any{}
+	for _, fn := range opLogExtras {
+		fn(c, cols)
+	}
+	extra := make(map[string]any, len(cols))
+	for name, v := range cols {
+		if opLogBaseColumns[name] || !opLogColumnRe.MatchString(name) {
+			log.Printf("[operation-log] extra column %q ignored", name)
+			continue
+		}
+		switch val := v.(type) {
+		case string:
+			extra[name] = logText(val, opLogExtraTextLimit)
+		case []byte:
+			extra[name] = logText(string(val), opLogExtraTextLimit)
+		default:
+			extra[name] = v
+		}
+	}
+	if len(extra) == 0 {
+		return nil
+	}
+	return extra
+}
+
+// writeOperationLog 写一条日志。有扩展列时用 map 一次插入；插入失败（比如下游登记了表上没有的列）
+// 退回只写基底字段，日志本身不丢。
+func writeOperationLog(e opLogEntry) error {
+	if len(e.extra) == 0 {
+		return store.DB.Create(&e.OperationLog).Error
+	}
+	createdAt := e.CreatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now() // 结构体写入时 GORM 会自动填，map 写入不会
+	}
+	row := map[string]any{
+		"created_at": createdAt,
+		"user_id":    e.UserID,
+		"username":   e.Username,
+		"method":     e.Method,
+		"path":       e.Path,
+		"status":     e.Status,
+		"duration":   e.Duration,
+		"ip":         e.IP,
+		"user_agent": e.UserAgent,
+		"body":       e.Body,
+	}
+	for name, v := range e.extra {
+		row[name] = v
+	}
+	if err := store.DB.Model(&adminmodel.OperationLog{}).Create(row).Error; err != nil {
+		log.Printf("[operation-log] write with extra columns failed, retrying without them: %v", err)
+		return store.DB.Create(&e.OperationLog).Error
+	}
+	return nil
+}
 
 // startOpLogWriter 用单个后台 writer 串行写日志。
 // 之前是每请求 `go DB.Create` 且丢弃错误：SQLite 上并发插库互相争锁
 // （实测 100 并发写 INSERT 峰值 200ms+，还拖慢同期读请求），goroutine 数量也无上限。
 // channel 满时丢弃该条并打日志，绝不阻塞请求。
 func startOpLogWriter() {
-	opLogCh = make(chan adminmodel.OperationLog, 1024)
+	opLogCh = make(chan opLogEntry, 1024)
 	go func() {
 		for entry := range opLogCh {
-			if err := store.DB.Create(&entry).Error; err != nil {
+			if err := writeOperationLog(entry); err != nil {
 				log.Printf("[operation-log] write failed: %v", err)
 			}
 		}
@@ -232,7 +338,7 @@ func OperationLog() fiber.Handler {
 		}
 
 		select {
-		case opLogCh <- entry:
+		case opLogCh <- opLogEntry{OperationLog: entry, extra: collectOperationLogExtra(c)}:
 		default:
 			log.Printf("[operation-log] buffer full, entry dropped: %s %s", entry.Method, entry.Path)
 		}
