@@ -259,6 +259,28 @@ func main() {
 }
 ```
 
+**紧急强制停止 / 重启**（资金、数据类 bug，老代码一刻都不能再跑）：平滑重启和 `systemctl stop` / `restart` 都会等进行中的请求做完
+（老代码继续执行），紧急时绕开它们，直接对整个 cgroup 发 SIGKILL（主进程、收尾中的老进程、正在执行的 ExecStop / ExecReload 一起）。
+杀之前先让单元「起不来」，免得 `Restart=always` 又拉起来：单元里加一条断言，紧急停止时先写这个标记文件：
+
+```ini
+[Unit]
+AssertPathExists=!/opt/app/emergency/app.stopped
+```
+
+```bash
+# 紧急停止：写标记（之后 Restart=、手工 start、开机都起不来）→ 全部进程立刻 SIGKILL → 状态收成 inactive
+mkdir -p /opt/app/emergency && date >/opt/app/emergency/app.stopped
+systemctl kill --signal=SIGKILL app; systemctl stop app
+# 恢复 / 紧急重启（用盘上现在的程序文件）：先照上面杀干净，再
+rm /opt/app/emergency/app.stopped; systemctl start app
+```
+
+不用 `systemctl mask --runtime`：单元装在 `/etc/systemd/system` 时，它的优先级高于 `/run` 里的屏蔽，屏蔽不生效。
+进行中的请求会被切断（对方看到连接中断 / 502），不在一个事务里的多步操作可能只做了一半。确认 cgroup 里一个进程都不剩
+（`/sys/fs/cgroup$(systemctl show -p ControlGroup --value app)/cgroup.procs` 为空）再做后续。下游可以把这几步包成脚本放在服务器上，
+发布脚本加一个强制模式（装完程序直接紧急重启）；bj96weixin-go 的 `deploy/emergency.sh` 是一个现成的例子（含测试构建里的长请求接口和真实 systemd 测试）。
+
 一个进程只调一次 `Serve`。要在一个进程里开多个监听，直接用 `graceful` 包（`Listen` 每个监听取一个名字，全部 `Listen`
 之后再 `Ready`，SIGHUP 时 `Upgrade`，见包文档）。
 
