@@ -17,7 +17,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port int `yaml:"port"`
+	// Host 监听地址，空串（默认）监听所有网卡；在 nginx 之后的生产服务填 127.0.0.1，别的机器连不上
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
 	// Mode 为 production 时启动前校验 jwt.secret（见 ValidateProduction），且种子只创建 super 账号
 	Mode          string `yaml:"mode"`
 	EnableSwagger bool   `yaml:"enable_swagger"`
@@ -63,6 +65,10 @@ func Load(path string) error {
 		if port, err := strconv.Atoi(v); err == nil && port > 0 && port < 65536 {
 			C.Server.Port = port
 		}
+	}
+	// 环境变量 SERVER_HOST 优先于 config.yaml，systemd 单元里用它把服务钉在 127.0.0.1
+	if v := strings.TrimSpace(os.Getenv("SERVER_HOST")); v != "" {
+		C.Server.Host = v
 	}
 	return nil
 }

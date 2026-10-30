@@ -43,7 +43,8 @@ func main() {
 | `Fiber` | `fiber.New` 之前调整配置 |
 
 只要数据层（定时任务、命令行工具）时用 `basekit.Bootstrap`；要拿到 `*fiber.App` 自己控制监听
-（测试、自定义 Listener）时用 `basekit.NewApp`。
+（测试、自定义 Listener）时用 `basekit.NewApp`；自己组装的 app 要监听地址和平滑重启时交给 `basekit.Serve`
+（见[监听地址与平滑重启](#监听地址与平滑重启)）。
 
 用 `Bootstrap` 时也把 `Seed: store.ProjectSeed` 传上（种子是幂等的）：模板垫片 `internal/store` 里的
 `store.DB` 是在 `ProjectSeed` 里赋值的，不传 Seed 它就是 nil。或者干脆在这类工具里直接用 kit 的 `store.DB`。
@@ -189,7 +190,74 @@ Routes: func(app *fiber.App) {
 同一个 worker 就同时跑 N 份——下游真实案例：回调投递 worker 叠了 7 份，同一条回调发两遍，CI 时好时坏。
 测试里记得 `t.Cleanup(func() { _ = app.Shutdown() })`，并排在关库之后注册（`t.Cleanup` 后注册的先执行）。
 
-`basekit.Run` 收到退出信号时直接结束进程，这一点没变；生产上要优雅退出，自己接管信号并调 `app.ShutdownWithTimeout`。
+不是 systemd 以 `Type=notify` 启动时，`basekit.Run` 收到退出信号直接结束进程，这一点没变；以 `Type=notify` 启动时
+优雅退出、平滑重启，见下一节。平滑重启时老进程收尾期间（最多 `DrainTimeout`）它的任务还在跑（ctx 到最后 Shutdown 才取消，
+免得收尾中的请求用到的连接被任务的清理逻辑关掉），和新进程起的同一份任务并存；不能并发跑两份的任务（定时扫描、投递）
+在循环里看 `graceful.IsDraining()`，开始收尾就不再取新活。
+
+## 监听地址与平滑重启
+
+**监听地址**：`server.host`，默认空串＝所有网卡（与以前的 `:port` 一样）。在 nginx 之后的生产服务填 `127.0.0.1`，
+别的机器连不上。环境变量 `SERVER_HOST` 优先于配置（可以写在 systemd 单元里）。
+
+**平滑重启**：`basekit.Run` / `basekit.Serve` 发现自己是 systemd 以 `Type=notify` 启动的（有 `NOTIFY_SOCKET`）时自动启用，
+不用改代码；别的启动方式（`make dev`、`Type=simple` 的单元、非 unix）与以前完全一样。单元这样写：
+
+```ini
+[Service]
+Type=notify
+NotifyAccess=all
+ExecStart=/opt/app/server/app
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+# 收尾：ShutdownTimeout 20 秒 + 后台任务 10 秒，留余量
+TimeoutStopSec=60
+```
+
+- **就绪**：初始化（读配置、连库、迁移、注册路由）完、开始接请求后报 `READY=1`，`systemctl start` 等到这时才返回。
+- **`systemctl reload`**（SIGHUP）：同一个程序文件、同样的命令行参数起新进程，监听 socket 交给它（一直开着，不会有连接被拒）。
+  新进程准备好后，老进程不再接新连接、新进程开始接，并报给 systemd 换主进程（`MAINPID`）；老进程长连接上再来的请求原样转给新进程
+  （响应带 `Connection: close`），进行中的请求照常做完，连接都关掉后（最多 `DrainTimeout`）退出。
+  所以 **reload 之后开始的请求一律由新程序、新配置处理**。
+- **新进程起不来**（配置错、程序崩、`ReadyTimeout` 内没准备好）：杀掉它，老进程照常服务，日志里有「平滑重启失败」。
+  `systemctl reload` 只是发信号、立刻返回，**不代表成功**：发布脚本要看 `systemctl show -p MainPID --value <服务>` 换没换、再探活。
+- **老进程收尾期间新进程崩了**：新进程这时是老进程的子进程，systemd 发现不了；老进程把主进程要回来并退出，由 `Restart=` 重新拉起。
+- **`systemctl stop`**（SIGTERM）：报 `STOPPING=1`，不再接新连接，进行中的请求做完（最多 `ShutdownTimeout`）后退出。
+- **发布**：新程序文件写到旁边再 `mv` 过去（换 inode；不要原地覆盖正在运行的文件），然后 `systemctl reload`。
+- **要 `systemctl restart` 的情况**（会断开进行中的请求）：单元文件改了（`User`、沙箱、`Environment` 这些是 systemd 起进程时设的，
+  reload 起的新进程继承老进程的）、监听地址改了（继承的 socket 不会换，日志里有警告）、单元第一次从 `Type=simple` 换成 `Type=notify`、
+  回退到 1.7.0 之前的版本（它不会报 READY，单元也要一起换回去）。
+- **不跨进程的内存状态**：登录失败计数、拼图验证码（2 分钟有效）、权限和用户缓存。reload 后计数清零；reload 前刚拿到、
+  reload 后才提交的验证码会校验失败，重新拖一次即可。
+
+时限在 `basekit.ServeOptions` 里调（`Run` 用默认值）：
+
+| 字段 | 默认 | 含义 |
+| --- | --- | --- |
+| `Name` | `http` | 监听名，交接时按名字对应 |
+| `Addr` | `server.host:server.port` | 监听地址 |
+| `ReadyTimeout` | 90 秒 | 等新进程准备好的上限，超时算失败 |
+| `DrainTimeout` | 70 秒 | 交接后老进程等连接关掉的上限（nginx upstream `keepalive_timeout` 默认 60 秒） |
+| `ShutdownTimeout` | 20 秒 | 最后关闭时等进行中请求的上限 |
+
+**同一个程序里的第二个服务**（比如消息网关）用子命令起，自己的 `fiber.App` 交给 `Serve`，单独一个 systemd 单元
+（`ExecStart=/opt/app/server/app gateway`）。reload 时按同样的参数起新进程，两个服务各自交接、互不影响：
+
+```go
+func main() {
+    if len(os.Args) > 1 && os.Args[1] == "gateway" {
+        app := gateway.NewApp() // 自己读配置、自己组装的 *fiber.App
+        if err := basekit.Serve(app, basekit.ServeOptions{Addr: "127.0.0.1:18090"}); err != nil {
+            log.Fatal(err)
+        }
+        return
+    }
+    basekit.Run(basekit.Options{ /* … */ })
+}
+```
+
+一个进程只调一次 `Serve`。要在一个进程里开多个监听，直接用 `graceful` 包（`Listen` 每个监听取一个名字，全部 `Listen`
+之后再 `Ready`，SIGHUP 时 `Upgrade`，见包文档）。
 
 ## 登录安全
 

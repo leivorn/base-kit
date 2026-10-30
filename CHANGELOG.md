@@ -7,6 +7,30 @@ base-kit 的版本记录。格式参考 Keep a Changelog，版本号遵循语义
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-10-30
+
+### 新增
+
+- 配置 `server.host`：监听地址。默认空串＝所有网卡，与此前的 `:port` 一样；在 nginx 之后的生产服务填 `127.0.0.1`。
+  环境变量 `SERVER_HOST` 优先于配置。
+- 平滑重启（新包 `graceful`，从 public-service 生产在用的实现提炼）：由 systemd 以 `Type=notify` 启动时，`basekit.Run`
+  自动启用——准备好后报 `READY=1`；`systemctl reload`（SIGHUP）时同一程序文件、同样的参数起新进程接手监听 socket，
+  新进程准备好后老进程不再接新连接、老长连接上的新请求转给新进程、进行中的请求做完再退出，全程不断连接；新进程起不来时老进程照常服务；
+  老进程收尾期间新进程崩了，老进程把主进程要回来交给 systemd 重新拉起。`systemctl stop` 时优雅退出（不再接新连接、做完进行中的请求）。
+  不是这样启动的（开发环境、`Type=simple`、非 unix）行为与此前完全一样。
+- `basekit.Serve(app, ServeOptions)`：给自己组装的 `*fiber.App` 用同一套监听与平滑重启，`ServeOptions` 可调监听名、地址、
+  `ReadyTimeout`（90 秒）、`DrainTimeout`（70 秒）、`ShutdownTimeout`（20 秒）。同一个程序用子命令起第二个服务、各自一个
+  systemd 单元时，各自交接、互不影响。`basekit.ListenAddr()` 返回配置的监听地址。
+
+### 升级步骤
+
+1. `cd server && go get github.com/leivorn/base-kit@v1.7.0`。不改 systemd 单元就与 1.6.0 行为一致。
+2. 要平滑重启：单元改成 `Type=notify`、`NotifyAccess=all`、`ExecReload=/bin/kill -HUP $MAINPID`，`TimeoutStopSec` 不小于 60；
+   换单元后 `systemctl daemon-reload && systemctl restart` 一次（这一次会断开进行中的请求），以后发布换完程序文件用
+   `systemctl reload`，并确认 `MainPID` 换了。细节见 README「监听地址与平滑重启」。
+3. 只给本机 nginx 用的服务在 `config.yaml` 的 `server` 段加 `host: 127.0.0.1`（或单元里 `Environment=SERVER_HOST=127.0.0.1`），
+   改监听地址要 restart。
+
 ## [1.6.0] - 2026-10-30
 
 ### 新增

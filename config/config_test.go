@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -53,5 +54,29 @@ func TestValidateProductionRejectsPlaceholderAndShortSecrets(t *testing.T) {
 	C.JWT.Secret = "kF3n9xQz2vLm8pRt4wYb6hJc1sDg7aEu5iOe0rNq"
 	if err := ValidateProduction(); err != nil {
 		t.Fatalf("strong secret must pass, got %v", err)
+	}
+}
+
+func TestLoadServerHost(t *testing.T) {
+	saved := C
+	t.Cleanup(func() { C = saved })
+	path := t.TempDir() + "/config.yaml"
+	if err := os.WriteFile(path, []byte("server:\n  host: 127.0.0.1\n  port: 18080\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SERVER_HOST", "")
+	if err := Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if C.Server.Host != "127.0.0.1" || C.Server.Port != 18080 {
+		t.Fatalf("host/port = %q/%d", C.Server.Host, C.Server.Port)
+	}
+	// 环境变量优先（systemd 单元里钉监听地址）
+	t.Setenv("SERVER_HOST", " ::1 ")
+	if err := Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if C.Server.Host != "::1" {
+		t.Fatalf("SERVER_HOST 没覆盖配置: %q", C.Server.Host)
 	}
 }

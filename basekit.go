@@ -167,6 +167,9 @@ func NewApp(opts Options) (*fiber.App, error) {
 //
 // 用于超管忘记密码、或生产模式因弱口令被拦在登录页外（后台里没有别人能替它重置）。
 // 在服务所在目录、以服务的运行用户执行，读同一份 config.yaml。
+//
+// 监听 server.host:server.port，由 Serve 起服务：systemd 以 Type=notify 启动时支持平滑重启（systemctl reload）
+// 和优雅退出，否则与以前的 app.Listen 一样。
 func Run(opts Options) {
 	if len(os.Args) > 1 && os.Args[1] == "reset-password" {
 		if err := resetPassword(opts, os.Args[2:]); err != nil {
@@ -179,9 +182,9 @@ func Run(opts Options) {
 	if err != nil {
 		log.Fatalf("启动失败: %v", err)
 	}
-	addr := fmt.Sprintf(":%d", config.C.Server.Port)
-	log.Printf("Server starting on %s", addr)
-	log.Fatal(app.Listen(addr))
+	if err := Serve(app, ServeOptions{}); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func resetPassword(opts Options, args []string) error {
