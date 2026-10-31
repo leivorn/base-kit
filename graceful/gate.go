@@ -73,8 +73,13 @@ func (g *gate) resume() {
 }
 
 // Close 关掉监听；暂停中等着的 Accept 放出来，拿到「监听已关闭」的错误返回。
+// 重复关返回 nil：fasthttp 的 Shutdown 关监听出错时直接返回，不等进行中的请求。
 func (g *gate) Close() error {
 	g.mu.Lock()
+	if g.closed {
+		g.mu.Unlock()
+		return nil
+	}
 	g.closed = true
 	if g.paused {
 		g.paused = false

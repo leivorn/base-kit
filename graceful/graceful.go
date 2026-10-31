@@ -378,19 +378,14 @@ func dupListener(g *gate) (*os.File, error) {
 	return os.NewFile(uintptr(dup), "listener"), nil
 }
 
-// BeginDrain 开始退出：关掉自己的监听（交接后已经暂停了；新进程还开着同一个 socket；没有新进程时新连接会被拒），
-// 之后的响应带 Connection: close，Draining() 关闭。可以重复调用。
+// BeginDrain 开始退出：之后的响应带 Connection: close，Draining() 关闭。可以重复调用。
+// 监听不在这里关，由 app.ShutdownWithTimeout 关（交接后已经暂停、不接新连接了；没有新进程时 Shutdown 一关新连接就被拒）：
+// 提前关掉的话，Shutdown 里 fasthttp 再关一次报 net.ErrClosed、不等进行中的请求直接返回；fasthttp 的 Serve 也会先返回，
+// GetOpenConnectionsCount 少算一个，交接后收尾时剩最后一个进行中的请求就当成没有连接了。
 func BeginDrain() { std.beginDrain() }
 
 func (s *state) beginDrain() {
-	s.drainOnce.Do(func() {
-		close(s.drain)
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		for _, name := range s.names {
-			_ = s.listeners[name].Close()
-		}
-	})
+	s.drainOnce.Do(func() { close(s.drain) })
 }
 
 // Draining 在开始退出（交接成功或收到退出信号）时关闭。不能和新进程并行的后台任务据此停止取新活。

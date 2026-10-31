@@ -1,7 +1,6 @@
 package basekit
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -122,8 +121,8 @@ func serveSupervised(app *fiber.App, opts ServeOptions) error {
 				_ = graceful.Notify("STOPPING=1")
 				graceful.BeginDrain()
 			}
-			// 监听 BeginDrain 时已经关了，Shutdown 再关一次的 net.ErrClosed 不算错
-			if err := app.ShutdownWithTimeout(opts.ShutdownTimeout); err != nil && !errors.Is(err, net.ErrClosed) {
+			// 监听由 Shutdown 关（BeginDrain 不关），它等进行中的请求做完（最多 ShutdownTimeout）
+			if err := app.ShutdownWithTimeout(opts.ShutdownTimeout); err != nil {
 				log.Printf("关闭: %v", err)
 			}
 			log.Printf("已退出（pid %d）", os.Getpid())
