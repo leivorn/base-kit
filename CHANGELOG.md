@@ -7,12 +7,18 @@ base-kit 的版本记录。格式参考 Keep a Changelog，版本号遵循语义
 
 ## [Unreleased]
 
+## [1.7.1] - 2026-10-31
+
 ### 修复
 
 - 平滑重启 / 退出不等进行中的请求：`graceful.BeginDrain` 先关了监听，`app.ShutdownWithTimeout` 里 fasthttp 再关一次报
   `net.ErrClosed`、直接返回不等连接（`basekit.Serve` 还把这个错吞了），`systemctl stop` 时进行中的请求随进程退出被断掉；
   交接后收尾时 fasthttp 的 Serve 已返回，`GetOpenConnectionsCount` 少算一个，剩最后一个进行中的请求就退出。
   改为 `BeginDrain` 不关监听、由 Shutdown 关，`gate.Close` 重复调用返回 nil。
+
+### 升级步骤
+
+1. `cd server && go get github.com/leivorn/base-kit@v1.7.1`。不改配置、不改 systemd 单元；发布照常 `systemctl reload`。
 
 ## [1.7.0] - 2026-10-30
 
